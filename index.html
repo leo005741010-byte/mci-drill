@@ -47,7 +47,6 @@ h2{font-size:15px;color:var(--mut);font-weight:700;margin:18px 2px 8px}
 .rolebtn{background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:12px;text-align:left}
 .rolebtn b{display:block;font-size:16.5px;color:var(--navy-dark)}
 .rolebtn span{font-size:12.5px;color:var(--mut)}
-.rolebtn.done{border-color:#bfe3cd;background:#fafdfb}.rolebtn.done span{color:var(--ok)}
 .rolebtn.rand{grid-column:1/-1;background:var(--navy);border-color:var(--navy)}.rolebtn.rand b,.rolebtn.rand span{color:#fff}
 
 /* 情境簡報 */
@@ -154,6 +153,7 @@ table.lvt{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}
 table.lvt th,table.lvt td{border:1px solid var(--line);padding:6px 6px;text-align:left;vertical-align:top}
 table.lvt th{background:#eef2f7;color:var(--mut);font-weight:700}
 table.lvt tr.cur td{background:var(--warnbg);font-weight:700}
+.tile.wide{grid-column:1/-1}
 dl.kv dd.ref{font-weight:400;color:var(--mut);font-size:13.5px}
 .pno{display:inline-block;background:var(--navy);color:#fff;border-radius:6px;padding:0 8px;margin-right:8px;font-size:15px}
 .fb .should .why{display:inline;font-size:14px;color:var(--mut)}
@@ -165,7 +165,7 @@ dl.kv dd.ref{font-weight:400;color:var(--mut);font-size:13.5px}
 <main class="wrap" id="app"></main>
 <script>
 'use strict';
-const VERSION='v3.1';
+const VERSION='v3.2';
 // 這次演習的設定。任務卡與題目裡的人數是照這組數字寫的，改這裡時要一起改。
 const DRILL={y:2026,m:10,d:28,when:'上午',what:'國道車禍',red:2,yellow:2,green:15};
 const DRILL_N=DRILL.red+DRILL.yellow+DRILL.green;
@@ -190,7 +190,6 @@ const ZONE={
 const OLD_PT_BED='急診第 11–17 床（放不下時安排 C 棟二樓）';
 
 const TRIAGE_SECONDS=60, TRIAGE_N=10;
-const LS_KEY='mciDrill_v2';      // 只存個人最佳紀錄，不上雲端（沿用第二版的鍵，舊紀錄不會不見）
 const PHASES=['333 預備','333 開始','回報與結案'];
 const ZONES={red:'紅區',yellow:'黃區',green:'綠區',black:'黑區'};
 // 答錯的類型：role＝做了別人的事、report＝該報沒報或找錯人、delay＝拖到了、wrong＝做法不對
@@ -1332,8 +1331,6 @@ const $app=document.getElementById('app');
 function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1));}
 function pick(a){return a[Math.floor(Math.random()*a.length)];}
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
-function load(){try{const o=JSON.parse(localStorage.getItem(LS_KEY)||'{}');return {units:o.units||{},triage:o.triage||null};}catch(e){return {units:{},triage:null};}}
-function save(st){try{localStorage.setItem(LS_KEY,JSON.stringify(st));}catch(e){}}
 
 /* ───────── 走一遍：組一局 ─────────
    一局固定 5 題：共同題 1 題＋這個位置自己的題目 3 題（三個階段各抽一題）＋突發狀況 1 張。
@@ -1412,7 +1409,7 @@ let timer=null;
 function go(v){if(timer){clearInterval(timer);timer=null;}S.view=v;render();window.scrollTo(0,0);}
 function render(){$app.innerHTML=VIEWS[S.view]();}
 const back=(v,label)=>'<button class="back" data-act="go" data-v="'+(v||'home')+'">‹ '+(label||'首頁')+'</button>';
-function foot(){return '<div class="foot">依據院內「'+SOP_NAME+'」<br>任務箱裡的任務卡以院內版本為準<br>紀錄只存在這支裝置・'+VERSION+'</div>';}
+function foot(){return '<div class="foot">依據院內「'+SOP_NAME+'」<br>任務箱裡的任務卡以院內版本為準<br>'+VERSION+'</div>';}
 // 任務卡上半：由誰擔任、去哪裡、向誰回報、這次演習的數字、規範條文
 function unitHead(r){
   return '<dl class="kv">'+(r.who?'<dt>由誰擔任</dt><dd>'+r.who+'</dd>':'')+
@@ -1429,11 +1426,11 @@ const ul=a=>'<ul>'+a.map(t=>'<li>'+t+'</li>').join('')+'</ul>';
 
 const VIEWS={
 home(){
-  const st=load(), wd='日一二三四五六'[new Date(DRILL.y,DRILL.m-1,DRILL.d).getDay()];
+  const wd='日一二三四五六'[new Date(DRILL.y,DRILL.m-1,DRILL.d).getDay()];
   const jobBtn=j=>{
-    const done=j.units.filter(u=>st.units[u]).length, n=j.units.length;
-    const txt=n>1?(done?'走過 '+done+'／'+n+' 個位置':n+' 個可能的位置'):(done?'最佳 '+st.units[j.units[0]].best+' 分':'還沒走過');
-    return '<button class="rolebtn '+(done===n?'done':'')+'" data-act="job" data-v="'+j.id+'"><b>'+j.name+'</b><span>'+txt+'</span></button>';
+    const n=j.units.length, r=ROLE(j.units[0]);
+    const txt=n>1?n+' 個可能的位置':(r.name!==j.name?r.name:r.go);
+    return '<button class="rolebtn" data-act="job" data-v="'+j.id+'"><b>'+j.name+'</b><span>'+txt+'</span></button>';
   };
   return '<div class="card"><div class="k">演習</div><div class="dtitle">'+DRILL.m+' 月 '+DRILL.d+' 日（'+wd+'）'+DRILL.when+'・'+DRILL.what+'</div>'+
     '<div class="sev">'+['red','yellow','green'].map(z=>'<div class="sv '+z+'"><b>'+DRILL[z]+'</b><span>'+ZONE[z].sev+'・'+ZONE[z].c+'</span></div>').join('')+'</div>'+
@@ -1445,19 +1442,19 @@ home(){
     '<button class="mode" data-act="go" data-v="triage"><b>檢傷練習</b><span>'+TRIAGE_SECONDS+' 秒內把 '+TRIAGE_N+' 位傷患分到紅、黃、綠、黑區</span></button>'+foot();
 },
 job(){
-  const j=JOB(S.job), st=load();
+  const j=JOB(S.job);
   return back()+'<div class="card"><div class="k">我的職類</div><div class="rolename">'+j.name+'</div>'+
     '<p class="mut" style="margin:6px 0 0">你可能負責下面其中一個位置，當天以任務卡和組長的指派為準，每一個都先看過。</p></div>'+
-    '<div class="rolegrid one">'+j.units.map(u=>{const r=ROLE(u), b=st.units[u];
-      return '<button class="rolebtn '+(b?'done':'')+'" data-act="unit" data-v="'+u+'"><b>'+r.name+'</b><span>'+(b?'最佳 '+b.best+' 分・':'')+r.go+'</span></button>';}).join('')+'</div>';
+    '<div class="rolegrid one">'+j.units.map(u=>{const r=ROLE(u);
+      return '<button class="rolebtn" data-act="unit" data-v="'+u+'"><b>'+r.name+'</b><span>'+r.go+'</span></button>';}).join('')+'</div>';
 },
 unit(){
-  const r=ROLE(S.unit), j=JOB(S.job), b=load().units[r.id], multi=j&&j.units.length>1;
+  const r=ROLE(S.unit), j=JOB(S.job), multi=j&&j.units.length>1;
   const n=ROUND_N;
   return back(multi?'job':'home',multi?j.name:'首頁')+
     '<div class="card">'+(j&&j.name!==r.name?'<div class="k">'+j.name+'</div>':'')+'<div class="rolename">'+r.name+'</div>'+unitHead(r)+'</div>'+
     '<button class="btn primary block" data-act="walk">走一遍（'+n+' 題）</button>'+
-    '<p class="mut center">'+(b?'最佳 '+b.best+' 分・走過 '+b.plays+' 次':'照這次演習的情境，一題一題選你會怎麼做')+'</p>'+
+    '<p class="mut center">照這次演習的情境，一題一題選你會怎麼做</p>'+
     '<div class="card tasks">'+unitBody(r)+'</div>';
 },
 play(){
@@ -1488,8 +1485,8 @@ result(){
       '<div class="a '+(ok?'ok':'no')+'">'+(ok?'✓ ':'✗ ')+o[0]+(ok?'':'（'+TAGS[o[1]]+'）')+'</div>'+
       (ok?'':'<div class="c">'+o[2]+'</div><div class="c"><span class="mut">該怎麼做：</span>'+x.q.o[0][0]+'</div>')+'</div>';
   }).join('');
-  return '<div class="tiles"><div class="tile big"><span class="k">'+R.role.name+'</span><span class="n">'+L.score+'<small> 分</small></span><span class="h">答對 '+L.right+'／'+L.total+' 題</span></div>'+
-    '<div class="tile big"><span class="k">這個位置的最佳</span><span class="n">'+L.best+'<small> 分</small></span><span class="h">'+(L.isBest?'這一次刷新紀錄':'走過 '+L.plays+' 次')+'</span></div></div>'+
+  return '<div class="tiles"><div class="tile big wide"><span class="k">'+R.role.name+'</span><span class="n">'+L.score+'<small> 分</small></span><span class="h">答對 '+L.right+'／'+L.total+' 題</span></div>'+
+    '</div>'+
     '<div class="tiles">'+['role','report','delay','wrong'].map(tile).join('')+'</div>'+
     '<details class="card"><summary>逐題回顧<small>錯 '+(L.total-L.right)+' 題</small></summary><div class="in">'+rev+'</div></details>'+
     '<div class="btnrow"><button class="btn primary" data-act="again">再走一遍</button><button class="btn" data-act="go" data-v="unit">回我的任務</button></div>'+
@@ -1518,11 +1515,9 @@ all(){
     groups.map(g=>'<h2>'+g+'</h2>'+ROLES.filter(r=>r.grp===g).map(det).join('')).join('')+foot();
 },
 triage(){
-  const tb=load().triage;
   const z=k=>'<i class="zdot" style="background:var(--z-'+k+')"></i>'+ZONE[k].c+'（'+ZONE[k].sev+'）';
   return back()+
-    '<div class="card"><p class="story">'+TRIAGE_SECONDS+' 秒內分完 '+TRIAGE_N+' 位傷患，照院內「大量傷患分類標準表」分到紅、黃、綠、黑區。</p>'+
-    '<p class="mut" style="margin:8px 0 0">'+(tb?'最佳紀錄：答對 '+tb.best+'／'+TRIAGE_N+'，用時 '+tb.time+' 秒（玩過 '+tb.plays+' 次）':'還沒有紀錄')+'</p></div>'+
+    '<div class="card"><p class="story">'+TRIAGE_SECONDS+' 秒內分完 '+TRIAGE_N+' 位傷患，照院內「大量傷患分類標準表」分到紅、黃、綠、黑區。</p></div>'+
     '<details class="card"><summary>大量傷患分類標準表（附件四）</summary><div class="in"><ol class="rule">'+
     ['red','yellow','green','black'].map(k=>'<li>'+z(k)+'：'+ZONE[k].rule+'</li>').join('')+'</ol>'+
     '<p class="mut" style="margin:12px 0 0">判斷「傷病危急」的細節，參考 START 檢傷法：</p><ol class="rule">'+
@@ -1549,7 +1544,7 @@ triResult(){
       '<div class="a '+(j==='ok'?'ok':'no')+'">'+(j==='ok'?'✓ '+ZONES[a]:j==='none'?'✗ 來不及分':'✗ 你分到'+ZONES[a]+'（'+(j==='over'?'過度檢傷':'檢傷不足')+'）')+'</div>'+
       (j==='ok'?'':'<div class="c">'+p.why+'</div>')+'</div>';
   }).join('');
-  return '<div class="tiles"><div class="tile big"><span class="k">答對</span><span class="n">'+L.right+'<small>／'+T.list.length+'</small></span><span class="h">'+(L.isBest?'刷新最佳紀錄':'最佳 '+L.best+'／'+T.list.length)+'</span></div>'+
+  return '<div class="tiles"><div class="tile big"><span class="k">答對</span><span class="n">'+L.right+'<small>／'+T.list.length+'</small></span><span class="h">共 '+T.list.length+' 位傷患</span></div>'+
     '<div class="tile big"><span class="k">用時</span><span class="n">'+L.used+'<small> 秒</small></span><span class="h">'+(L.none?'有 '+L.none+' 位來不及分':'時限 '+TRIAGE_SECONDS+' 秒')+'</span></div></div>'+
     '<div class="tiles"><div class="tile '+(L.over?'bad':'good')+'"><span class="k">過度檢傷</span><span class="n">'+L.over+'<small> 位</small></span><span class="h">分得比實際重</span></div>'+
     '<div class="tile '+(L.under?'bad':'good')+'"><span class="k">檢傷不足</span><span class="n">'+L.under+'<small> 位</small></span><span class="h">分得比實際輕</span></div></div>'+
@@ -1566,10 +1561,7 @@ function finishRound(){
   const R=S.round, tags={role:0,report:0,delay:0,wrong:0};let right=0;
   S.log.forEach(x=>{const t=x.q.o[x.pick][1];if(t==='ok')right++;else tags[t]++;});
   const total=R.qs.length, score=Math.round(right/total*100);
-  const st=load(), old=st.units[R.role.id]||{best:0,plays:0};
-  const isBest=score>old.best||!old.plays;
-  st.units[R.role.id]={best:Math.max(old.best,score),plays:old.plays+1};save(st);
-  S.last={right,total,score,tags,isBest,best:st.units[R.role.id].best,plays:old.plays+1};
+  S.last={right,total,score,tags};
   go('result');
 }
 function triStart(){
@@ -1593,10 +1585,7 @@ function triFinish(){
   const T=S.tri, r={right:0,over:0,under:0,none:0};
   T.list.forEach((p,i)=>{const j=triJudge(T.ans[i],p.cat);if(j==='ok')r.right++;else r[j]++;});
   r.used=Math.min(TRIAGE_SECONDS,Math.round((Date.now()-T.t0)/1000));
-  const st=load(), old=st.triage;
-  r.isBest=!old||r.right>old.best||(r.right===old.best&&r.used<old.time);
-  st.triage={best:r.isBest?r.right:old.best,time:r.isBest?r.used:old.time,plays:(old?old.plays:0)+1};save(st);
-  r.best=st.triage.best;T.res=r;go('triResult');
+  T.res=r;go('triResult');
 }
 document.addEventListener('click',ev=>{
   const b=ev.target.closest('[data-act]');if(!b)return;
