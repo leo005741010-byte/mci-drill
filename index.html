@@ -165,7 +165,7 @@ dl.kv dd.ref{font-weight:400;color:var(--mut);font-size:13.5px}
 <main class="wrap" id="app"></main>
 <script>
 'use strict';
-const VERSION='v3';
+const VERSION='v3.1';
 // 這次演習的設定。任務卡與題目裡的人數是照這組數字寫的，改這裡時要一起改。
 const DRILL={y:2026,m:10,d:28,when:'上午',what:'國道車禍',red:2,yellow:2,green:15};
 const DRILL_N=DRILL.red+DRILL.yellow+DRILL.green;
@@ -1336,8 +1336,9 @@ function load(){try{const o=JSON.parse(localStorage.getItem(LS_KEY)||'{}');retur
 function save(st){try{localStorage.setItem(LS_KEY,JSON.stringify(st));}catch(e){}}
 
 /* ───────── 走一遍：組一局 ─────────
-   共同題＋這個位置自己的題目＋兩張突發狀況（「333 開始」、「回報與結案」各一張）。 */
-const EVENTS_PER_ROUND=2;
+   一局固定 5 題：共同題 1 題＋這個位置自己的題目 3 題（三個階段各抽一題）＋突發狀況 1 張。
+   每次抽的不一樣，多走幾遍就會看到這個位置所有的題目。 */
+const ROUND_N=5, ROUND_OWN=3;
 function eventQuestion(e,role,p){
   if(e.o) return {kind:'event',p,s:e.s,o:e.o};
   const owner=ROLE(e.owner), w=e.wrong.find(x=>x[0]!==role.id);
@@ -1348,17 +1349,16 @@ function eventQuestion(e,role,p){
     [e.ignT,'report',e.ign]]};
 }
 function buildRound(role){
+  // 自己的題目：先每個階段各抽一題，不夠再從剩下的補
+  const byP=[0,1,2].map(p=>shuffle(role.q.filter(q=>q.p===p)));
+  const own=byP.map(a=>a.shift()).filter(Boolean);
+  const rest=shuffle([].concat(...byP));
+  while(own.length<ROUND_OWN&&rest.length) own.push(rest.shift());
   const can=EVENTS.filter(e=>(e.site||['er']).includes(role.site)&&!e.skip.includes(role.id));
-  const evs=shuffle(can).slice(0,EVENTS_PER_ROUND).map((e,i)=>eventQuestion(e,role,i+1));
-  const qs=[];
-  for(let p=0;p<3;p++){
-    const rq=role.q.filter(q=>q.p===p).map(q=>Object.assign({kind:'role'},q));
-    const ev=evs.filter(e=>e.p===p);
-    const part=COMMON.filter(k=>k.p===p).map(k=>Object.assign({},k));
-    rq.forEach((q,i)=>{part.push(q);if(i===0)part.push(...ev);});
-    if(!rq.length)part.push(...ev);
-    qs.push(...part);
-  }
+  const ev=can.length?[eventQuestion(pick(can),role,pick([1,2]))]:[];
+  const order={key:0,role:1,event:2};
+  const qs=[Object.assign({},pick(COMMON))].concat(own.slice(0,ROUND_OWN).map(q=>Object.assign({kind:'role'},q)),ev)
+    .sort((a,b)=>a.p-b.p||order[a.kind]-order[b.kind]);
   qs.forEach(q=>{q.oo=shuffle(q.o.map((_,i)=>i));});
   return {role,qs};
 }
@@ -1453,7 +1453,7 @@ job(){
 },
 unit(){
   const r=ROLE(S.unit), j=JOB(S.job), b=load().units[r.id], multi=j&&j.units.length>1;
-  const n=COMMON.length+r.q.length+EVENTS_PER_ROUND;
+  const n=ROUND_N;
   return back(multi?'job':'home',multi?j.name:'首頁')+
     '<div class="card">'+(j&&j.name!==r.name?'<div class="k">'+j.name+'</div>':'')+'<div class="rolename">'+r.name+'</div>'+unitHead(r)+'</div>'+
     '<button class="btn primary block" data-act="walk">走一遍（'+n+' 題）</button>'+
